@@ -24,7 +24,7 @@ pub fn main() !void {
 
     const max_length = 20;
 
-    var wtf8 = (try std.unicode.Wtf8View.init("Hello world!")).iterator();
+    var wtf8 = (try std.unicode.Wtf8View.init("Hello World!")).iterator();
 
     var codepoints = try std.BoundedArray(u21, max_length).init(0);
 

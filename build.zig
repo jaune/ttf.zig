@@ -18,6 +18,7 @@ pub fn build(b: *std.Build) !void {
     const font_paths = [_][]const u8{
         "./fonts/Roboto/static/Roboto-Regular.ttf",
         "./fonts/Inter/static/Inter_18pt-Regular.ttf",
+        "./fonts/Noto_Serif/static/NotoSerif-Regular.ttf",
     };
 
     for (font_paths) |font_path| {

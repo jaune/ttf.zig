@@ -126,7 +126,7 @@ pub fn readMandatoryOffsetTableRecords(file: std.fs.File) !MandatoryOffsetTableR
     while (table_index < ot.num_tables) {
         const table_record = try readTableRecord(&reader);
 
-        // std.log.debug("{s}", .{table_record.table_tag});
+        // std.log.debug("table: {s}", .{table_record.table_tag});
 
         if (std.mem.eql(u8, "glyf", &table_record.table_tag)) {
             maybe_glyf_table = table_record;
@@ -484,6 +484,7 @@ fn readAndAllocGlyphOffsets(allocator: std.mem.Allocator, file: std.fs.File, off
 const GlyphPoint = struct {
     x: i16,
     y: i16,
+    on_curve: bool,
 };
 
 const GlyphTableRecordContours = struct {
@@ -507,6 +508,39 @@ const GlyphTableRecord = union(enum) {
     empty: void,
     contours: GlyphTableRecordContours,
     composite: GlyphTableRecordComposite,
+};
+
+const GlyphCoordKind = enum(u2) {
+    short_vector_positive,
+    short_vector_negative,
+    long_vector,
+    is_same,
+};
+
+const GlyphFlags = struct {
+    on_curve: bool,
+    // overlap_simple: bool,
+    x_kind: GlyphCoordKind,
+    y_kind: GlyphCoordKind,
+
+    fn initFromInt(v: u8) @This() {
+        return .{
+            .on_curve = v & 0x01 == 0x01,
+            // .overlap_simple = v & 0x40 == 0x40,
+            .x_kind = switch (v & (0x02 | 0x10)) {
+                0x02 | 0x10 => .short_vector_positive,
+                0x02 => .short_vector_negative,
+                0x10 => .is_same,
+                else => .long_vector,
+            },
+            .y_kind = switch (v & (0x04 | 0x20)) {
+                0x04 | 0x20 => .short_vector_positive,
+                0x04 => .short_vector_negative,
+                0x20 => .is_same,
+                else => .long_vector,
+            },
+        };
+    }
 };
 
 const GlyphTable = struct {
@@ -562,39 +596,6 @@ const GlyphTable = struct {
 
         try reader.skipBytes(instructionLength, .{});
 
-        const GlyphCoordKind = enum(u2) {
-            short_vector_positive,
-            short_vector_negative,
-            long_vector,
-            is_same,
-        };
-
-        const GlyphFlags = struct {
-            on_curve_point: bool,
-            overlap_simple: bool,
-            x_kind: GlyphCoordKind,
-            y_kind: GlyphCoordKind,
-
-            fn initFromInt(v: u8) @This() {
-                return .{
-                    .on_curve_point = v & 0x01 == 0x01,
-                    .overlap_simple = v & 0x40 == 0x40,
-                    .x_kind = switch (v & (0x02 | 0x10)) {
-                        0x02 | 0x10 => .short_vector_positive,
-                        0x02 => .short_vector_negative,
-                        0x10 => .is_same,
-                        else => .long_vector,
-                    },
-                    .y_kind = switch (v & (0x04 | 0x20)) {
-                        0x04 | 0x20 => .short_vector_positive,
-                        0x04 => .short_vector_negative,
-                        0x20 => .is_same,
-                        else => .long_vector,
-                    },
-                };
-            }
-        };
-
         const glyph_points = try allocator.alloc(GlyphPoint, glyph_points_size);
         errdefer allocator.free(glyph_points);
 
@@ -618,28 +619,24 @@ const GlyphTable = struct {
             return error.GlyphHasMissingFlags;
         }
 
-        var last_coord: i16 = 0;
-
         for (glyph_flags, glyph_points) |f, *p| {
+            p.on_curve = f.on_curve;
+
             p.x = switch (f.x_kind) {
-                .is_same => last_coord,
+                .is_same => 0,
                 .long_vector => try reader.readInt(i16, endian),
                 .short_vector_negative => -@as(i16, @intCast(try reader.readInt(u8, endian))),
                 .short_vector_positive => @intCast(try reader.readInt(u8, endian)),
             };
-            last_coord = p.x;
         }
-
-        last_coord = 0;
 
         for (glyph_flags, glyph_points) |f, *p| {
             p.y = switch (f.y_kind) {
-                .is_same => last_coord,
+                .is_same => 0,
                 .long_vector => try reader.readInt(i16, endian),
                 .short_vector_negative => -@as(i16, @intCast(try reader.readInt(u8, endian))),
                 .short_vector_positive => @intCast(try reader.readInt(u8, endian)),
             };
-            last_coord = p.y;
         }
 
         return .{
