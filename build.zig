@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "zig-ttf",
+        .name = "ttf-main",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) !void {
 
     b.installArtifact(exe);
 
-    const run_step = b.step("run_all", "Run the app");
+    const run_step = b.step("run", "Run the app");
 
     const font_paths = [_][]const u8{
         "./fonts/Roboto/static/Roboto-Regular.ttf",
@@ -27,7 +27,6 @@ pub fn build(b: *std.Build) !void {
         run_cmd.step.dependOn(b.getInstallStep());
 
         run_cmd.addArg(font_path);
-
         run_cmd.addArg(try std.fmt.allocPrint(b.allocator, "./out/{s}.svg", .{std.fs.path.basename(font_path)}));
 
         run_step.dependOn(&run_cmd.step);
